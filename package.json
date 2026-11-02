@@ -44,6 +44,8 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:smoke": "node scripts/smoke-esm.mjs && node scripts/smoke-cjs.cjs",
+    "test:consumer": "node scripts/verify-tarball.mjs",
     "lint": "tsc --noEmit"
   },
   "keywords": [

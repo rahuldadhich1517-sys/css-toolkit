@@ -7,11 +7,12 @@ on:
     branches: [main]
 
 jobs:
-  build-and-test:
+  dev-verification:
+    name: Dev Verification (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x]
+        node-version: [22.x, 24.x]
     steps:
       - uses: actions/checkout@v4
 
@@ -38,3 +39,48 @@ jobs:
 
       - name: Package Dry Run
         run: npm pack --dry-run
+
+      - name: Create Package Tarball
+        if: matrix.node-version == '22.x'
+        run: npm pack
+
+      - name: Upload Package Tarball
+        if: matrix.node-version == '22.x'
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-tarball
+          path: '*.tgz'
+          retention-days: 1
+
+  runtime-compatibility:
+    name: Runtime Compatibility (Node ${{ matrix.node-version }})
+    needs: [dev-verification]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18.x, 20.x, 22.x, 24.x]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Download Package Tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: package-tarball
+          path: tarball
+
+      - name: Test package in isolated consumer environment
+        run: |
+          CONSUMER_DIR=$(mktemp -d)
+          cd "$CONSUMER_DIR"
+          npm init -y
+          npm install $GITHUB_WORKSPACE/tarball/*.tgz
+          cp "$GITHUB_WORKSPACE/scripts/smoke-esm.mjs" ./
+          cp "$GITHUB_WORKSPACE/scripts/smoke-cjs.cjs" ./
+          node smoke-esm.mjs
+          node smoke-cjs.cjs

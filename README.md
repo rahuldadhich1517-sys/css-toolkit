@@ -341,7 +341,7 @@ Deterministic benchmarks ensure linear scaling:
 
 ## Development, Testing & Coverage
 
-To test and verify the package locally:
+### Quick Scripts
 
 ```bash
 # Install dependencies
@@ -353,14 +353,59 @@ npm run typecheck
 # Run Vitest test suite
 npm run test:run
 
-# Run test coverage
+# Run test coverage (requires Node.js >= 22.15)
 npm run test:coverage
+
+# Run built-package runtime smoke test
+npm run test:smoke
+
+# Verify tarball installation in an isolated consumer project
+npm run test:consumer
 
 # Build package bundles
 npm run build
 
 # Dry-run npm pack
 npm pack --dry-run
+```
+
+### Node.js Compatibility & CI Pipeline Architecture
+
+This package maintains a strict distinction between **package runtime compatibility** and **development toolchain requirements**:
+
+| Context | Supported Node Versions | Description |
+|---|---|---|
+| **Package Runtime** | `>= 18.0.0` (18.x, 20.x, 22.x, 24.x) | The pre-compiled bundle in `dist/` targets standard ES2022 & CommonJS with zero development dependencies. Supported in production on all modern LTS versions. |
+| **Dev & Coverage Toolchain** | `>= 22.15.0` (22.x, 24.x) | The development testing suite uses **Vitest 5** and `@vitest/coverage-v8`. Vitest 5's TypeScript V8 coverage provider relies on native `module.stripTypeScriptTypes` (available in Node.js 22.15+). |
+| **Built Tarball Smoke Tests** | `18.x`, `20.x`, `22.x`, `24.x` | Standalone ESM and CommonJS compatibility suites (`scripts/smoke-esm.mjs`, `scripts/smoke-cjs.cjs`) that test the actual compiled tarball in isolated consumer projects. |
+
+#### Continuous Integration Architecture
+
+The GitHub Actions CI pipeline (`.github/workflows/ci.yml`) is split into two logically separated phases:
+
+1. **Job A: Development Verification (`dev-verification`)**:
+   - Executes on **Node.js 22.x** and **24.x**.
+   - Runs `npm ci`, `typecheck`, `lint`, `test:coverage`, `build`, and `npm pack --dry-run`.
+   - Generates the production npm tarball artifact (`*.tgz`).
+
+2. **Job B: Runtime Compatibility (`runtime-compatibility`)**:
+   - Executes across all declared supported versions: **Node.js 18.x, 20.x, 22.x, and 24.x**.
+   - Downloads the pre-built tarball from Job A.
+   - Installs the tarball into an isolated temporary consumer project via `npm install <tarball>`.
+   - Executes standalone ESM (`import`) and CommonJS (`require`) smoke tests without invoking Vitest, tsx, or Babel.
+   - Verifies root package exports (`@rahul_dadhich15/css-toolkit`), subpaths (`/scss`, `/tailwind`, `/node`), representative utilities, return values, and `CssToolkitError` handling.
+
+#### Local Reproduction of Runtime Checks
+
+To reproduce the exact runtime compatibility checks locally:
+
+```bash
+# 1. Build and test against local dist
+npm run build
+npm run test:smoke
+
+# 2. Test full tarball packaging, isolated consumer install, and dual-module execution
+npm run test:consumer
 ```
 
 Coverage Target:
